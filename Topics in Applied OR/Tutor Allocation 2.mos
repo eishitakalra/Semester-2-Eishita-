@@ -35,6 +35,7 @@ declarations
   lpt: array(Tutors) of integer ! number of preferences per tutor (dont want prefs)
   ! hpt: array(Tutors) of real ! number of preferences per tutor (high prefs)
   m: array(Tutors) of integer  ! getting minimum b/t preferences and course max limit
+  p: array(Tutors, Courses) of real
 
   ! ! ! Names
   Tutor_names: array(Tutors) of string
@@ -51,7 +52,7 @@ declarations
 end-declarations
 
 initializations from 'NewData2.txt'
-  wth tmm r a e W lpt Tutor_names Course_names Timeslot_names ! parameters
+  wth tmm r a e W lpt Tutor_names Course_names Timeslot_names p  ! parameters
 end-initializations
 
 ! ===== Binary Decision Var =======================================
@@ -144,11 +145,17 @@ forall(i in Tutors, j in Courses, t in Tdash) do
   xt(i,j,t) - xt(i,j,t-1) <= 1 - W(j,t)
 end-do
 
+! no tutor can work for more than 8 consecutive timeslots (4 hours)
+forall(i in Tutors, j in Courses) do
+    forall(start in 1..(nbTimeslots - 8)) do
+        sum(t in start..start + 7) xt(i, j, t) <= 8
+    end-do
+end-do
 
 ! ==== Objective Function and Optimization ==============
 
 
-obj_fnct := sum(i in Tutors, j in Courses, t in Timeslots) (xt(i,j,t) * m(i))
+obj_fnct := sum(i in Tutors, j in Courses, t in Timeslots) (xt(i,j,t) * p(i,j))
 obj_fnct2 := wl_max - wl_min
 
 setparam("XPRS_VERBOSE", 1)
@@ -156,7 +163,7 @@ setparam("XPRS_VERBOSE", 1)
 minimise(obj_fnct)
 
 
-! ==== Print Statements ==================================
+! ! ==== Print Statements ==================================
 
 forall(i in Tutors, j in Courses, t in Timeslots) do
   if getsol( xt(i,j,t)) > 0 then
@@ -177,7 +184,7 @@ writeln( "Tutor Name, Course Name, Timeslot")
 
 forall(i in Tutors, j in Courses, t in Timeslots) do
   if getsol(xt(i,j,t)) > 0.5 then
-    writeln("Tutor", i, ",", "Course",j, ",", t)
+    writeln(Tutor_names(i), ",", Course_names(j), ",", t)
   end-if
 end-do
 
@@ -194,7 +201,17 @@ forall(i in Tutors, t in Timeslots) do
       l(i,t) := 0
     end-if
   end-do
-  writeln( "Tutor",i, ",", t, ",", l(i,t))
+  writeln( Tutor_names(i), ",", t, ",", l(i,t))
+end-do
+
+fclose(F_OUTPUT)
+
+! Update availability matrix
+fopen( "each_tutors_hours.csv", F_OUTPUT)
+writeln("Tutor Name, Hours a week")
+
+forall(i in Tutors) do
+  writeln( Tutor_names(i), ",", (1/2)*getsol(sum(t in Timeslots, j in Courses)xt(i,j,t)) )
 end-do
 
 fclose(F_OUTPUT)
